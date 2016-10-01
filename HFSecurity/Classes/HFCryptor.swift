@@ -6,7 +6,7 @@
 //
 //
 
-import Foundation
+import HFUtility
 import RNCryptor
 
 public class HFCryptor {
