@@ -1,0 +1,25 @@
+PODS:
+  - HFSecurity (1.0.1):
+    - OptionalTypes
+    - RNCryptor
+    - TinyLog
+  - OptionalTypes (1.0.3)
+  - RNCryptor (5.0.1)
+  - TinyLog (1.0.1)
+
+DEPENDENCIES:
+  - HFSecurity (from `../`)
+
+EXTERNAL SOURCES:
+  HFSecurity:
+    :path: ../
+
+SPEC CHECKSUMS:
+  HFSecurity: 6fc85d41aca6a1dc23a9719abd98a9416732b54f
+  OptionalTypes: a51c1b33edaf7e848d506c66f37bd8eece408092
+  RNCryptor: 2e352a488779d1a9184ab629be22a7c5bc84acb5
+  TinyLog: 6c3ecbc348d10dc242ebb506f684fc9ae6aff533
+
+PODFILE CHECKSUM: bd9f3cc0f2def22e1b2b1bfc4e40df7dcfe28f2c
+
+COCOAPODS: 1.2.1
