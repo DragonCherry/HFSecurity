@@ -6,16 +6,16 @@
 //
 //
 
-import HFUtility
 import CoreFoundation
 import Security
 import RNCryptor
+import TinyLog
 
-public class HFCryptorRSA {
+open class HFCryptorRSA {
     
-    private let kTemporaryKeyTag: String = "kTemporaryKeyTag"
+    fileprivate let kTemporaryKeyTag: String = "kTemporaryKeyTag"
     
-    private enum HFCryptorRSAProcessType {
+    fileprivate enum HFCryptorRSAProcessType {
         case encrypt
         case decrypt
     }
@@ -30,37 +30,36 @@ public class HFCryptorRSA {
     var keySize: HFCryptorRSAKeySize = .bits2048
     
     // MARK: - Private Key
-    private var privateTag: String!
-    private var privateSecKey: SecKey? = nil
-    public var privateKey: NSData? {
-        return keyDataForTag(self.privateTag)
+    fileprivate var privateTag: String!
+    fileprivate var privateSecKey: SecKey? = nil
+    open var privateKey: Data? {
+        return keyData(forTag: privateTag)
     }
     
     // MARK: - Public Key
-    private var publicTag: String!
-    private var publicSecKey: SecKey? = nil
-    public var publicKey: NSData? {
-        return keyDataForTag(self.publicTag)
+    fileprivate var publicTag: String!
+    fileprivate var publicSecKey: SecKey? = nil
+    open var publicKey: Data? {
+        return keyData(forTag: publicTag)
     }
     
     // MARK: - Initializer
     public init(privateTag: String, publicTag: String) {
+        self.privateSecKey = self.secKey(forTag: privateTag)
         self.privateTag = privateTag
-        self.privateSecKey = self.secKeyForTag(self.privateTag)
-        
+        self.publicSecKey = self.secKey(forTag: publicTag)
         self.publicTag = publicTag
-        self.publicSecKey = self.secKeyForTag(self.publicTag)
     }
     
     // MARK: - API
-    public func generateKeyPair(size: HFCryptorRSAKeySize = .bits2048, writeOnKeychain: Bool = false, regenerate: Bool = false) -> Bool {
+    open func generateKeyPair(_ size: HFCryptorRSAKeySize = .bits2048, writeOnKeychain: Bool = false, regenerate: Bool = false) -> Bool {
         
-        self.keySize = size
+        keySize = size
         
         // clear if regeneration flag is on
         if regenerate {
-            self.updateKey(self.privateTag, keyData: nil)
-            self.updateKey(self.publicTag, keyData: nil)
+            updateKey(privateTag, keyData: nil)
+            updateKey(publicTag, keyData: nil)
         }
         
         // set option for private key
@@ -71,7 +70,7 @@ public class HFCryptorRSA {
             String(kSecAttrCanSign): true,
             String(kSecAttrCanVerify): false,
             String(kSecAttrApplicationTag): self.privateTag
-        ]
+        ] as [String : Any]
         
         // set option for public key
         let publicAttributes = [
@@ -81,7 +80,7 @@ public class HFCryptorRSA {
             String(kSecAttrCanSign): false,
             String(kSecAttrCanVerify): true,
             String(kSecAttrApplicationTag): self.publicTag
-        ]
+        ] as [String : Any]
         
         // set option for key pair
         let pairAttributes = [
@@ -89,14 +88,14 @@ public class HFCryptorRSA {
             String(kSecAttrKeySizeInBits): size.rawValue,
             String(kSecPublicKeyAttrs): publicAttributes,
             String(kSecPrivateKeyAttrs): privateAttributes
-        ]
+        ] as [String : Any]
         
         // generate key pair
-        let status = SecKeyGeneratePair(pairAttributes, &self.publicSecKey, &self.privateSecKey)
+        let status = SecKeyGeneratePair(pairAttributes as CFDictionary, &publicSecKey, &privateSecKey)
         if errSecSuccess == status {
             log("Successfully generated key pair on \(writeOnKeychain ? "keychain" : "memory") with size of \(size.rawValue) bit.")
-            log("[Private Key] \(self.keyDataForTag(self.privateTag)?.base64EncodedStringWithOptions(NSDataBase64EncodingOptions(rawValue: 0)))")
-            log("[Public Key] \(self.keyDataForTag(self.publicTag)?.base64EncodedStringWithOptions(NSDataBase64EncodingOptions(rawValue: 0)))")
+            log("[Private Key] \(keyData(forTag: privateTag)?.base64EncodedString(options: NSData.Base64EncodingOptions(rawValue: 0)) ?? "Fail")")
+            log("[Public Key] \(keyData(forTag: publicTag)?.base64EncodedString(options: NSData.Base64EncodingOptions(rawValue: 0)) ?? "Fail")")
             return true
         } else {
             loge("Failed to generate RSA key pair with code: \(status)")
@@ -105,24 +104,24 @@ public class HFCryptorRSA {
     }
     
     /// encrypt
-    public func encrypt(data: NSData, key: NSData? = nil, padding: SecPadding = .None) -> NSData? {
+    open func encrypt(_ data: Data, key: Data? = nil, padding: SecPadding = SecPadding()) -> Data? {
         return process(data, type: .encrypt, key: key, padding: padding)
     }
     
-    public func decrypt(data: NSData, key: NSData? = nil, padding: SecPadding = .None) -> NSData? {
+    open func decrypt(_ data: Data, key: Data? = nil, padding: SecPadding = SecPadding()) -> Data? {
         return process(data, type: .decrypt, key: key, padding: padding)
     }
     
     /// encrypt or decrypt data with given key
-    private func process(data: NSData, type: HFCryptorRSAProcessType, key: NSData? = nil, padding: SecPadding = .None) -> NSData? {
+    fileprivate func process(_ data: Data, type: HFCryptorRSAProcessType, key: Data? = nil, padding: SecPadding = SecPadding()) -> Data? {
         
         var processingSecKey: SecKey? = nil
         
         // log data size
-        log("Data size to process: \(data.length), key size: \(self.keySize.rawValue)")
+        log("Data size to process: \(data.count), key size: \(self.keySize.rawValue)")
         
         if type == .encrypt {
-            guard data.length < (self.keySize.rawValue / 8) else {
+            guard data.count < (self.keySize.rawValue / 8) else {
                 loge("Data size exceeds its limit.")
                 return nil
             }
@@ -134,7 +133,7 @@ public class HFCryptorRSA {
             if self.updateKey(kTemporaryKeyTag, keyData: designatedKey) {
                 
                 // check key first
-                guard let designatedSecKey = self.secKeyForTag(kTemporaryKeyTag) else {
+                guard let designatedSecKey = secKey(forTag: kTemporaryKeyTag) else {
                     return nil
                 }
                 processingSecKey = designatedSecKey
@@ -164,8 +163,8 @@ public class HFCryptorRSA {
         
         // process data using SecKey
         if let processingSecKey = processingSecKey {
-            let plainBytes = UnsafePointer<UInt8>(data.bytes)
-            let plainBytesLength = data.length
+            let plainBytes = (data as NSData).bytes.bindMemory(to: UInt8.self, capacity: data.count)
+            let plainBytesLength = data.count
             
             var cipherBytesLength = SecKeyGetBlockSize(processingSecKey)
             
@@ -173,7 +172,8 @@ public class HFCryptorRSA {
                 log("Failed to allocate NSMutableData with length \(cipherBytesLength)")
                 return nil
             }
-            let cipherBytes = UnsafeMutablePointer<UInt8>(cipherData.mutableBytes)
+            
+            let cipherBytes = cipherData.mutableBytes.assumingMemoryBound(to: UInt8.self)
             
             var status = errSecSuccess
             if type == .encrypt {
@@ -185,7 +185,7 @@ public class HFCryptorRSA {
             if status == errSecSuccess {
                 log("Successfully \(type == .encrypt ? "encrypted" : "decrypted") data with RSA key.")
                 
-                return cipherData.subdataWithRange(NSMakeRange(0, cipherBytesLength))
+                return cipherData.subdata(with: NSMakeRange(0, cipherBytesLength))
             } else {
                 loge("Failed to \(type == .encrypt ? "encrypt" : "decrypt") data with RSA key.")
                 return nil
@@ -197,47 +197,48 @@ public class HFCryptorRSA {
     }
     
     // MARK: - Internal Utilities
-    private func secKeyForTag(tag: String) -> SecKey? {
+    fileprivate func secKey(forTag tag: String) -> SecKey? {
         var keyRef: AnyObject? = nil
         let query = [
             String(kSecAttrKeyType): kSecAttrKeyTypeRSA,
             String(kSecReturnData): kCFBooleanTrue as CFBoolean,
-            String(kSecClass): kSecClassKey as CFStringRef,
-            String(kSecAttrApplicationTag): tag as CFStringRef,
-            ]
-        let status = SecItemCopyMatching(query, &keyRef)
-        guard let secKey = keyRef as! SecKey? where status == errSecSuccess else {
+            String(kSecClass): kSecClassKey as CFString,
+            String(kSecAttrApplicationTag): tag as CFString,
+            ] as [String : Any]
+        let status = SecItemCopyMatching(query as CFDictionary, &keyRef)
+        guard let secKey = keyRef as! SecKey?, status == errSecSuccess else {
             loge("Failed to retrieve key with result code: \(status), for tag: \(tag)")
             return nil
         }
         return secKey
     }
     
-    private func keyDataForTag(tag: String) -> NSData? {
+    fileprivate func keyData(forTag tag: String) -> Data? {
         var keyRef: AnyObject? = nil
         let query = [
             String(kSecAttrKeyType): kSecAttrKeyTypeRSA,
             String(kSecReturnData): kCFBooleanTrue as CFBoolean,
-            String(kSecClass): kSecClassKey as CFStringRef,
-            String(kSecAttrApplicationTag): tag as CFStringRef,
-            ]
-        let status = SecItemCopyMatching(query, &keyRef)
-        guard let keyData = keyRef as? NSData where status == errSecSuccess else {
+            String(kSecClass): kSecClassKey as CFString,
+            String(kSecAttrApplicationTag): tag as CFString,
+            ] as [String : Any]
+        let status = SecItemCopyMatching(query as CFDictionary, &keyRef)
+        guard let keyData = keyRef as? Data, status == errSecSuccess else {
             loge("Failed to retrieve key data with result code: \(status), for tag: \(tag)")
             return nil
         }
         return keyData
     }
     
-    private func updateKey(tag: String, keyData: NSData?) -> Bool {
+    @discardableResult
+    fileprivate func updateKey(_ tag: String, keyData: Data?) -> Bool {
         
         let query: Dictionary<String, AnyObject> = [
             String(kSecAttrKeyType): kSecAttrKeyTypeRSA,
-            String(kSecClass): kSecClassKey as CFStringRef,
-            String(kSecAttrApplicationTag): tag as CFStringRef]
+            String(kSecClass): kSecClassKey as CFString,
+            String(kSecAttrApplicationTag): tag as CFString]
         
         if let keyData = keyData {
-            let status = SecItemUpdate(query, [String(kSecValueData): keyData])
+            let status = SecItemUpdate(query as CFDictionary, [String(kSecValueData): keyData] as CFDictionary)
             if status == errSecSuccess {
                 log("Successfully updated key for tag: \(tag)")
                 return true
@@ -246,7 +247,7 @@ public class HFCryptorRSA {
                 return false
             }
         } else {
-            let status = SecItemDelete(query)
+            let status = SecItemDelete(query as CFDictionary)
             if status == errSecSuccess {
                 log("Successfully deleted key for tag: \(tag)")
                 return true

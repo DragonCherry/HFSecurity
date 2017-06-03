@@ -8,8 +8,8 @@
 
 Pod::Spec.new do |s|
   s.name             = 'HFSecurity'
-  s.version          = '1.0.0'
-  s.summary          = 'Handy Framework - HFSecurity'
+  s.version          = '1.0.1'
+  s.summary          = 'Simple crypto utlility supports both RSA & AES.'
 
 # This description is used to generate tags and improve search results.
 #   * Think: What does it do? Why did you write it? What is the focus?
@@ -34,6 +34,7 @@ Pod::Spec.new do |s|
 
   # s.public_header_files = 'Pod/Classes/**/*.h'
   # s.frameworks = 'UIKit', 'MapKit'
-  s.dependency 'RNCryptor', '~> 4'
-  s.dependency 'HFUtility'
+  s.dependency 'RNCryptor'
+  s.dependency 'TinyLog'
+  s.dependency 'OptionalTypes'
 end

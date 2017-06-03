@@ -6,25 +6,26 @@
 //
 //
 
-import HFUtility
 import RNCryptor
+import TinyLog
+import OptionalTypes
 
-public class HFCryptor {
+open class HFCryptor {
     
-    private static let kUUIDSize = 36
+    fileprivate static let kUUIDSize = 36
     
     /// encrypts plain data and returns encrypted data
     /// - parameter data: UTF-8 encoded plain data to encrypt
     /// - parameter key: AES256 key(length 32)
     /// - returns: NSData encrypted data
-    public static func encrypt(data: NSData, key: String) -> NSData? {
+    open static func encrypt(_ data: Data, key: String) -> Data? {
         
-        guard key.lengthOfBytesUsingEncoding(NSUTF8StringEncoding) != kCCKeySizeAES256 else {
-            logw("\(#function) - invalid key(\(key)) with length: \(key.lengthOfBytesUsingEncoding(NSUTF8StringEncoding))")
+        guard key.lengthOfBytes(using: String.Encoding.utf8) != kCCKeySizeAES256 else {
+            logw("\(#function) - invalid key(\(key)) with length: \(key.lengthOfBytes(using: String.Encoding.utf8))")
             return nil
         }
         
-        return RNCryptor.encryptData(data, password: key)
+        return RNCryptor.encrypt(data: data, withPassword: key)
     }
     
     
@@ -32,15 +33,15 @@ public class HFCryptor {
     /// - parameter cipherData: encrypted data returned by ACCryptor.encrypt(data:key:)
     /// - parameter key: AES256 key(length 32)
     /// - returns: NSData decrypted data
-    public static func decrypt(cipherData: NSData, key: String) -> NSData? {
+    open static func decrypt(_ cipherData: Data, key: String) -> Data? {
         
-        guard key.lengthOfBytesUsingEncoding(NSUTF8StringEncoding) != kCCKeySizeAES256 else {
-            logw("\(#function) - invalid key(\(key)) with length: \(key.lengthOfBytesUsingEncoding(NSUTF8StringEncoding))")
+        guard key.lengthOfBytes(using: String.Encoding.utf8) != kCCKeySizeAES256 else {
+            logw("\(#function) - invalid key(\(key)) with length: \(key.lengthOfBytes(using: String.Encoding.utf8))")
             return nil
         }
         
         do {
-            return try RNCryptor.decryptData(cipherData, password: key)
+            return try RNCryptor.decrypt(data: cipherData, withPassword: key)
         } catch {
             loge(error)
             return nil
@@ -52,15 +53,15 @@ public class HFCryptor {
     /// - parameter key: AES256 key(length 32)
     /// - parameter augment: optional boolean for appending additional text to retrieve random cipher text on every encryption
     /// - returns: NSData decrypted data
-    public static func encrypt(plainText: String, key: String, augment: Bool? = false) -> String? {
+    open static func encrypt(_ plainText: String, key: String, isAugmented: Bool = false) -> String? {
         
-        guard let bodyData = plainText.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false) else {
+        guard let bodyData = plainText.data(using: String.Encoding.utf8, allowLossyConversion: false) else {
             return nil
         }
         
-        var cipherData: NSData? = nil
+        var cipherData: Data? = nil
         
-        if boolean(augment) {
+        if isAugmented {
             if let data = appendSuffix(bodyData) {
                 cipherData = HFCryptor.encrypt(data, key: key)
             }
@@ -69,7 +70,7 @@ public class HFCryptor {
         }
         
         if let cipherData = cipherData {
-            return cipherData.base64EncodedStringWithOptions(NSDataBase64EncodingOptions(rawValue: 0))
+            return cipherData.base64EncodedString(options: NSData.Base64EncodingOptions(rawValue: 0))
         } else {
             return nil
         }
@@ -80,9 +81,9 @@ public class HFCryptor {
     /// - parameter key: AES256 key(length 32)
     /// - parameter augment: set true to remove additional UUID text after get plain text
     /// - returns: NSData decrypted data
-    public static func decrypt(cipherText: String, key: String, augment: Bool? = false) -> String? {
+    open static func decrypt(_ cipherText: String, key: String, isAugmented: Bool = false) -> String? {
         
-        guard let cipherData = NSData(base64EncodedString: cipherText, options: NSDataBase64DecodingOptions(rawValue: 0)) else {
+        guard let cipherData = Data(base64Encoded: cipherText, options: NSData.Base64DecodingOptions(rawValue: 0)) else {
             return nil
         }
         
@@ -92,12 +93,12 @@ public class HFCryptor {
         
         var decryptedText: String? = nil
         
-        if boolean(augment) {
+        if isAugmented {
             if let deaugmented = removeSuffix(decryptedData) {
-                decryptedText = String(data: deaugmented, encoding: NSUTF8StringEncoding)
+                decryptedText = String(data: deaugmented, encoding: String.Encoding.utf8)
             }
         } else {
-            decryptedText = String(data: decryptedData, encoding: NSUTF8StringEncoding)
+            decryptedText = String(data: decryptedData, encoding: String.Encoding.utf8)
         }
         return decryptedText
     }
@@ -105,27 +106,24 @@ public class HFCryptor {
     /// append UUID text at the end of data
     /// - parameter data: original source
     /// - returns: NSData concatenated data
-    private static func appendSuffix(data: NSData) -> NSData? {
-        
-        let mutableData = NSMutableData(data: data)
-        guard let suffixData: NSData = NSUUID().UUIDString.dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false) else {
+    fileprivate static func appendSuffix(_ data: Data) -> Data? {
+        var mutableData = data
+        guard let suffixData: Data = UUID().uuidString.data(using: String.Encoding.utf8, allowLossyConversion: false) else {
             logw("failed to get UUID data")
             return nil
         }
-        mutableData.appendData(suffixData)
-        return mutableData as NSData
+        mutableData.append(suffixData)
+        return mutableData as Data
     }
     
     /// remove UUID text at the end of data
     /// - parameter data: concatenated data that returned by appendSuffix(data:)
     /// - returns: NSData original data
-    private static func removeSuffix(data: NSData) -> NSData? {
-        
-        let expectedLength = data.length - kUUIDSize
+    fileprivate static func removeSuffix(_ data: Data) -> Data? {
+        let expectedLength = data.count - kUUIDSize
         guard expectedLength >= 0 else {
             return nil
         }
-        let range: NSRange = NSMakeRange(0, expectedLength)
-        return data.subdataWithRange(range)
+        return data.subdata(in: 0..<expectedLength)
     }
 }
